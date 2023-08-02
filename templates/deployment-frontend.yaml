@@ -1,0 +1,83 @@
+{{- $name := "frontend" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-{{ $name }}"
+  labels:
+    {{- include "brambling-note-be-java.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "brambling-note-be-java.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "brambling-note-be-java.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "brambling-note-be-java.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.frontend }}
+      containers:
+        - name: {{ $name }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ .repository }}:{{ .tag }}"
+          imagePullPolicy: {{ .pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .service.targetPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 240
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 240
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+          # env:
+          #   https://github.com/Brambling-Apps/Brambling-Note-FE/commit/ef3f9f798bf16394c5aad621cf77d45f61465478
+          #   - name: REWRITES_PROD
+          #     value: '[{{- range $index, $service := $.Values.services }}{{ if ne $service.name "frontend" }}{{ if ne $index 0 }},{{ end }}{"source":"{{ $service.path }}/:path*","destination":"http://{{ $.Release.Name }}-{{ $service.name }}-service:{{ $service.port }}/:path*"}{{ end }}{{- end }}]'
+      initContainers:
+        - name: wait-user
+          image: busybox:1.28
+          command: ['sh', '-c', "until nslookup {{ $.Release.Name }}-user-service; do echo waiting for {{ $.Release.Name }}-user-service; sleep 2; done"]
+        - name: wait-note
+          image: busybox:1.28
+          command: ['sh', '-c', "until nslookup {{ $.Release.Name }}-note-service; do echo waiting for {{ $.Release.Name }}-note-service; sleep 2; done"]
+        - name: wait-auth
+          image: busybox:1.28
+          command: ['sh', '-c', "until nslookup {{ $.Release.Name }}-auth-service; do echo waiting for {{ $.Release.Name }}-auth-service; sleep 2; done"]
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

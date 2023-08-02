@@ -1,0 +1,18 @@
+{{- $fullName := include "brambling-note-be-java.fullname" . -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "brambling-note-be-java.fullname" . }}-test-connection"
+  labels:
+    {{- include "brambling-note-be-java.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    {{- range .Values.images }}
+    - name: "wget-{{ .name }}"
+      image: busybox
+      command: ['wget']
+      args: ['{{ $.fullname }}{{ .ingress.path }}/health']
+    {{- end }}
+  restartPolicy: Never

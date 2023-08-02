@@ -1,0 +1,14 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range $.Values.services }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}/health
+  {{- end }}
+{{- end }}
+{{- else }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward services/{{ .Release.Name }} 8081:8081 8082:8082 8083:8083
+  
+  http://localhost:8081/health
+  http://localhost:8082/health
+  http://localhost:8083/health
+{{- end }}

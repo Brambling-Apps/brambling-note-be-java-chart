@@ -1,0 +1,111 @@
+{{- $name := "user" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-{{ $name }}"
+  labels:
+    {{- include "brambling-note-be-java.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "brambling-note-be-java.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "brambling-note-be-java.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "brambling-note-be-java.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.user }}
+      containers:
+        - name: {{ $name }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
+          image: "{{ .repository }}:{{ .tag }}"
+          imagePullPolicy: {{ .pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .service.targetPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+          env:
+            - name: PORT
+              value: {{ .service.targetPort | quote }}
+            - name: DATASOURCE_URL
+              value: "jdbc:postgresql://{{ $.Release.Name }}-postgresql-{{ $name }}:5432/{{ $.Values.global.postgresql.auth.database }}"
+            - name: DATASOURCE_USERNAME
+              value: {{ $.Values.global.postgresql.auth.username | quote }}
+            - name: DATASOURCE_PASSWORD
+              value: {{ $.Values.global.postgresql.auth.password | quote }}
+            - name: CONSUL_HOST
+              value: "{{ $.Release.Name }}-consul-server"
+            # https://stackoverflow.com/a/56821808
+            - name: REDIS_HOST
+              value: "{{ $.Release.Name }}-redis-master"
+            - name: SMTP_HOST
+              value: {{ $.Values.smtp.host | quote }}
+            - name: SMTP_PORT
+              value: {{ $.Values.smtp.port | quote }}
+            - name: SMTP_STARTTLS
+              value: {{ $.Values.smtp.starttls | quote }}
+            - name: SMTP_SSL
+              value: {{ $.Values.smtp.ssl | quote }}
+            - name: SMTP_AUTH
+              value: {{ $.Values.smtp.auth.enabled | quote }}
+            - name: SMTP_EMAIL
+              value: {{ $.Values.smtp.auth.email | quote }}
+            - name: SMTP_PASSWORD
+              value: {{ $.Values.smtp.auth.password | quote }}
+            - name: VERIFICATION_EMAIL_SUBJECT
+              value: {{ $.Values.verification_email.subject | quote }}
+            - name: VERIFICATION_EMAIL_CONTENT
+              value: {{ $.Values.verification_email.content | quote }}
+      initContainers:
+        - name: wait-postgres
+          image: busybox:1.28
+          command: ['sh', '-c', "until nslookup {{ $.Release.Name }}-postgresql-{{ $name }}; do echo waiting for {{ $.Release.Name }}-postgresql-{{ $name }}; sleep 2; done"]
+        - name: wait-redis
+          image: busybox:1.28
+          command: ['sh', '-c', "until nslookup {{ $.Release.Name }}-redis-master; do echo waiting for {{ $.Release.Name }}-redis-master; sleep 2; done"]
+        - name: wait-consul
+          image: busybox:1.28
+          command: ['sh', '-c', "until nslookup {{ $.Release.Name }}-consul-server; do echo waiting for {{ $.Release.Name }}-consul-server; sleep 2; done"]
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
