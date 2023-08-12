@@ -26,3 +26,8 @@ verification_email:
   # %s is the placeholder of verification codes from verification email
   content: "Click this link to verify your account: http://brambling-note.local/verification/%s"
 ```
+
+## Usage
+```
+kubectl port-forward services/brambling-note-frontend-service <port-you-want>:8080
+```
